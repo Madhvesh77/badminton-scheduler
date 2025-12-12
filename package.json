@@ -1,0 +1,23 @@
+{
+  "name": "badminton-scheduler",
+  "version": "1.0.0",
+  "description": "Badminton match scheduler with fair rest distribution",
+  "scripts": {
+    "install-all": "npm run install-backend && npm run install-frontend",
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "build": "npm run build-frontend && npm run build-backend",
+    "build-frontend": "cd frontend && npm run build",
+    "build-backend": "cd backend && npm run build",
+    "start": "cd backend && NODE_ENV=production node dist/index.js",
+    "dev-backend": "cd backend && npm run dev",
+    "dev-frontend": "cd frontend && npm run dev"
+  },
+  "keywords": [
+    "badminton",
+    "scheduler",
+    "sports"
+  ],
+  "author": "",
+  "license": "MIT"
+}

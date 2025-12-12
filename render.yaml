@@ -1,0 +1,12 @@
+# Render Deployment Configuration
+
+This file tells Render how to build and deploy the application.
+
+## Build Command
+npm run install-backend && npm run install-frontend && npm run build
+
+## Start Command  
+npm start
+
+## Environment Variables
+NODE_ENV=production

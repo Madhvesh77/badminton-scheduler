@@ -9,6 +9,7 @@
 
 import express, { Request, Response } from "express";
 import cors from "cors";
+import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { generateSchedule } from "./scheduler";
 import { store } from "./store";
@@ -190,12 +191,22 @@ app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok" });
 });
 
-/**
- * 404 handler
- */
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: "Endpoint not found" });
-});
+// Serve static files from frontend build (for production)
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+
+  // Catch-all handler for frontend routes
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
+  });
+} else {
+  /**
+   * 404 handler (development only)
+   */
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: "Endpoint not found" });
+  });
+}
 
 // Start server
 app.listen(PORT, () => {
