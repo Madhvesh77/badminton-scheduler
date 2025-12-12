@@ -1,0 +1,128 @@
+Goal: Build a full-stack Badminton Scheduler web app (TypeScript) that automatically generates fair match schedules (singles/doubles) for 1+ courts, balances rest for odd-player scenarios and allows marking rounds completed/undo. Produce server, algorithm, frontend UI, tests, and README. Use clean code, comments, and small, focused files.
+
+Stack:
+- Backend: Node + Express + TypeScript
+- Frontend: React + TypeScript + Vite
+- In-memory persistence for simplicity (optionally persist to file). Use a simple JSON file store or localStorage for the frontend.
+- Testing: Jest for backend algorithm, React Testing Library for UI
+- Tooling: ts-node-dev for backend dev server, vite for frontend.
+
+High-level feature list (must implement):
+1. POST /api/schedule
+   - payload: { players: string[], courts: number, matchType: 'singles' | 'doubles' }
+   - response: { scheduleId: string, rounds: Round[] }
+   - Round: { id: string, matches: Match[], resting: string[], completed: boolean }
+   - Match: { id: string, teamA: string[], teamB: string[] } // for singles team arrays are size 1
+2. GET /api/schedule/:scheduleId - returns schedule
+3. POST /api/schedule/:scheduleId/round/:roundId/complete - toggles completed/undo
+4. Basic validation and helpful 400 messages.
+
+Algorithm Requirements (explicit, implement in backend scheduler.ts):
+- Input guarantees: players.length >= 5 (user said always >4), courts >= 1.
+- Generate all possible teams:
+  - Singles: teams = players (teams of size 1)
+  - Doubles: teams = all unordered pairs (nC2)
+- Generate all possible matches: unordered pairs of teams that do not share a player (teamA vs teamB)
+- Scheduling objective:
+  - Maximize the number of unique matches scheduled overall.
+  - In each round we must pick up to `courts` matches that are pairwise disjoint (no player appears in >1 match in that round).
+  - Try to minimize rest imbalance:
+    - Track restCount[player]
+    - When selecting players to rest in a round (because players > courts*teamSize), prefer players with the **highest playCount**? Actually prefer players with **lowest recent participation** so everyone rotates quickly.
+  - Use a two-layer approach:
+    1. Per-round selection: compute a **maximum-cardinality matching** on a graph where nodes are players (or teams) and edges are matches. For doubles, represent matches as edges between *teams* but ensure teams are disjoint. Implement a backtracking search with pruning that attempts to select the best set of up to `courts` disjoint matches for the round (bounded depth equals courts). Use heuristics: sort candidate matches by rarity of players (player frequency in remaining matches).
+    2. Global schedule construction: greedy loop that repeatedly picks best round (using the per-round routine), removes chosen matches from remaining set, updates rest counters, and repeats until no remaining matches or iterations cap (e.g., 1000 loops).
+  - After the main loop, if remaining matches exist (because of tight constraints), schedule them one-per-round to ensure all matches appear at least once.
+- Complexity: make it work reliably for n up to ~12–16 players. Code must be well-commented.
+
+Data models:
+- types.ts (shared): Player = string, Team = string[], MatchObj = {id, teamA: Team, teamB: Team}, Round = {id, matches: MatchObj[], resting: Player[], completed: boolean}, Schedule = {id, players: Player[], rounds: Round[]}
+
+Backend file list to generate:
+- backend/package.json (scripts: start, build, test)
+- backend/tsconfig.json
+- backend/src/index.ts (Express app + routes)
+- backend/src/scheduler.ts (algorithm)
+- backend/src/types.ts
+- backend/src/store.ts (simple in-memory + JSON file persistence optional)
+- backend/src/tests/scheduler.test.ts (Jest tests verifying important invariants)
+
+Frontend file list:
+- frontend/package.json (vite template)
+- frontend/vite config
+- frontend/src/main.tsx, App.tsx
+- frontend/src/components/SchedulerForm.tsx (form for players, courts, matchType)
+- frontend/src/components/ScheduleView.tsx (displays rounds, mark complete toggle)
+- frontend/src/api.ts (calls backend endpoints)
+- frontend/src/styles.css
+- Optional: persist completed flags in backend so UI can refresh.
+
+Frontend UI requirements (must implement):
+- Clean responsive layout (use minimal CSS, but modern look)
+- Form: multiline textarea for players (one per line), input for courts (min 1), select for singles/doubles, Generate button
+- After generate: show schedule with rounds numbered. Each round shows matches as "A + B vs C + D" (join with " + " for team members, " vs " between teams), and resting players below.
+- Each round has a toggle button "Mark Completed" -> when clicked, call backend to mark completed. Button label toggles to "Undo".
+- Completed rounds visually distinguished (light green background + strike-through)
+- Provide export to CSV / copy schedule button (optional)
+- Validate constraints in UI (players >= 5, courts >=1).
+
+Tests & acceptance checks (must include tests):
+- Backend tests:
+  - For N players small (5..9), ensure every round has disjoint players (a player does not appear twice in same round).
+  - Ensure every match in returned schedule corresponds to valid match from generated match set and no match is repeated.
+  - For odd players and 1 court (e.g., 7 players, 1 court), assert that rest counts across players differ by at most 1 after scheduling complete set of matches (equal distribution heuristic).
+- Frontend tests:
+  - Render form, submit sample players -> mock API and ensure schedule displayed
+  - Mark complete toggles correctly and calls API.
+
+UX details:
+- Show loading states for network requests.
+- Show error messages for validation or server errors.
+- Confirm before discarding an unsaved schedule.
+
+Deliverables (what I want Copilot to actually output):
+- Complete backend files listed above with working TypeScript code.
+- A tested `scheduler.ts` implementing the DSA algorithm described.
+- README.md with exact commands to run backend and frontend and how to test.
+- Minimal, polished React UI with round-complete toggle wired to backend.
+- Unit tests for scheduler and at least one high-level integration test.
+
+Implementation notes for Copilot:
+- Use UUIDs for ids (npm `uuid` or simple counter).
+- Keep code modular and small functions.
+- Add comments explaining the algorithm and complexity.
+- Use Date.now() or deterministic seeding for tests if randomness is used.
+- Avoid external heavy dependencies—prefer pure TS for algorithm.
+
+Example request bodies and expected response shapes to include in server code and README:
+- Request:
+  {
+    "players": ["Maru","Madh","Pri","Shy","Vasu","Anish","Suri"],
+    "courts": 1,
+    "matchType": "doubles"
+  }
+- Response:
+  {
+    "scheduleId":"sch_abc123",
+    "rounds":[
+      {
+        "id":"r1",
+        "matches":[{"id":"m1","teamA":["Maru","Madh"],"teamB":["Pri","Shy"]}],
+        "resting":["Vasu","Anish","Suri"],
+        "completed":false
+      },
+      ...
+    ]
+  }
+
+Edgecases to handle robustly:
+- Duplicate player names: dedupe but preserve mapping to original display names; reject if dedupe leads to less than 5 players.
+- Less than min players: return 400.
+- Very large players (>16): accept but warn about performance; consider sampling or fallback greedy-only algorithm.
+
+Finish the prompt by generating a README skeleton with run commands:
+- backend: cd backend && npm install && npm run start
+- frontend: cd frontend && npm install && npm run dev
+- tests: cd backend && npm run test
+
+Now generate all files described above, with working TypeScript backend and React frontend, scheduler algorithm implemented as specified, test files, and a README explaining usage.
